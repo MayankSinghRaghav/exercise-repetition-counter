@@ -18,13 +18,18 @@ mp_pose = mp.solutions.pose
 pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
 mp_draw = mp.solutions.drawing_utils
 
-# Load video
-cap = cv2.VideoCapture("demo video.mp4")
+# Choose exercise type: "squat" or "jumpingjack"
+EXERCISE = "squat"  
 
-counter = 0     
-stage = None
-sets = 0        
-SET_SIZE = 10   
+# Load video
+cap = cv2.VideoCapture("one.mp4")
+
+counter = 0
+stage = None  # "up" / "down"
+
+# Resize window for smooth display
+DISPLAY_WIDTH = 640
+DISPLAY_HEIGHT = 480
 
 while cap.isOpened():
     ret, frame = cap.read()
@@ -37,30 +42,47 @@ while cap.isOpened():
     if results.pose_landmarks:
         landmarks = results.pose_landmarks.landmark
 
-        # Track left hip & knee for squat detection
-        hip = landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].y
-        knee = landmarks[mp_pose.PoseLandmark.LEFT_KNEE.value].y
+        if EXERCISE == "squat":
+            # Track left hip and knee
+            hip = landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].y
+            knee = landmarks[mp_pose.PoseLandmark.LEFT_KNEE.value].y
 
-        # Squat counting rule
-        if hip > knee and stage != "down":
-            stage = "down"
-        if hip < knee and stage == "down":
-            stage = "up"
-            counter += 1
+            # Rule: squat when hip goes below knee and then back up
+            if hip > knee and stage != "down":
+                stage = "down"
+            if hip < knee and stage == "down":
+                stage = "up"
+                counter += 1
 
-            # Check if a set is completed
-            if counter % SET_SIZE == 0:
-                sets += 1
-                print(f"🎯 Set {sets} completed!")
+        elif EXERCISE == "jumpingjack":
+            # Track hands relative to shoulders & hips
+            left_hand = landmarks[mp_pose.PoseLandmark.LEFT_WRIST.value].y
+            right_hand = landmarks[mp_pose.PoseLandmark.RIGHT_WRIST.value].y
+            left_shoulder = landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].y
+            right_shoulder = landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].y
+            left_hip = landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].y
+            right_hip = landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value].y
 
-        # Overlay reps and sets
-        cv2.putText(frame, f"Reps: {counter}", (50, 100),
+            # Hands up → stage = "up"
+            if left_hand < left_shoulder and right_hand < right_shoulder and stage != "up":
+                stage = "up"
+
+            # Hands down → count rep
+            if left_hand > left_hip and right_hand > right_hip and stage == "up":
+                stage = "down"
+                counter += 1
+
+        # Overlay reps on video
+        cv2.putText(frame, f"{EXERCISE.capitalize()}s: {counter}", (50, 100),
                     cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 255, 0), 3)
-        cv2.putText(frame, f"Sets: {sets}", (50, 180),
-                    cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 0, 0), 3)
 
+        # Draw pose landmarks
         mp_draw.draw_landmarks(frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
 
+    # ✅ Resize frame for display
+    frame = cv2.resize(frame, (DISPLAY_WIDTH, DISPLAY_HEIGHT))
+
+    # Show video
     cv2.imshow("Exercise Counter", frame)
     if cv2.waitKey(10) & 0xFF == ord('q'):
         break
@@ -68,8 +90,7 @@ while cap.isOpened():
 cap.release()
 cv2.destroyAllWindows()
 
-print(f"✅ Final Repetition Count: {counter}")
-print(f"✅ Total Sets Completed: {sets}")
+print(f"✅ Final {EXERCISE.capitalize()} Count: {counter}")
 
 
 # In[ ]:
